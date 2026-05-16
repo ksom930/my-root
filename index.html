@@ -54,19 +54,23 @@
                 streetViewControl: false
             });
 
+	    // ★ここを追加：交通状況レイヤーを作成して地図に紐付ける
+    	    const trafficLayer = new google.maps.TrafficLayer();
+    	    trafficLayer.setMap(map);
+
             const directionsService = new google.maps.DirectionsService();
 
             // ルートA（青）の設定と描画
             const directionsRendererA = new google.maps.DirectionsRenderer({
                 map: map,
-                polylineOptions: { strokeColor: '#0000FF', strokeOpacity: 0.7, strokeWeight: 6 },
+                polylineOptions: { strokeColor: '#0000FF', strokeOpacity: 0.4, strokeWeight: 6 },
                 suppressMarkers: false
             });
 
             // ルートB（赤）の設定と描画
             const directionsRendererB = new google.maps.DirectionsRenderer({
                 map: map,
-                polylineOptions: { strokeColor: '#FF0000', strokeOpacity: 0.7, strokeWeight: 6 },
+                polylineOptions: { strokeColor: '#FF0000', strokeOpacity: 0.4, strokeWeight: 6 },
                 suppressMarkers: false
             });
 
