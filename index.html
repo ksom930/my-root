@@ -27,10 +27,11 @@
             <div id="switch-area">
                 <button id="btn-outbound" class="btn active" onclick="switchDirection('outbound')">行き（出勤）</button>
                 <button id="btn-inbound" class="btn" onclick="switchDirection('inbound')">帰り（退勤）</button>
+                <button id="btn-camera" class="btn" style="background: #28a745; color: #fff; border-color: #28a745;" onclick="openLiveCamera()">📹 ライブカメラ</button>
             </div>
             <div id="info-panel">
                 <div id="routeA-info" class="route-info">
-                    <div>ルートA (新大利根橋橋)</div>
+                    <div>ルートA (新大利根橋)</div>
                     <div id="timeA" class="time">計算中...</div>
                     <div id="distanceA" class="distance">- km</div>
                 </div>
@@ -45,7 +46,16 @@
     </div>
 
     <script>
-        // 【設定】経由地をそれぞれ最大3つまで登録できるようにしました。
+
+	// ★ここを追加：ボタンを押したときに国交省のページを別タブ（またはポップアップ）で開く関数
+        function openLiveCamera() {
+            const cameraUrl = "https://www.river.go.jp/kawabou/pc/tm?zm=15&clat=35.928902&clon=139.947251&fld=0&mapType=0&viewGrpStg=0&viewRd=1&viewRW=1&viewRl=1&viewRn=1&viewPoint=1&ext=0&itmkndCd=200&scamId=121259226&ownCd=21259&sysCamId=21259226";
+            
+        // スマホのブラウザで新しいタブとして開きます
+            window.open(cameraUrl, '_blank');
+        }
+
+        // 【設定】経由地を合計25箇所まで登録できるようにしました。
         // 使わない場所は ""（空欄）のままにしておけば、自動的に無視してルートを繋ぎます。
         const CONFIG = {
             home: "35.951436085177804, 139.99986558211424", 
@@ -63,8 +73,6 @@
                 "35.953975466590045, 139.97651495344445",  // ファミマ
                 "35.96369125014711, 139.9632788112447",  // プリウス
 		"35.96611971777015, 139.95815167742717",  // だしとおうどん
-		"35.96730398536431, 139.95033074527885",  // 滝下橋の神社１
-		"35.96530302433056, 139.9495225855841",  // 中間点２
 		"35.96730398536431, 139.95033074527885",  // 農道十字路先３
 		"35.96695289638652, 139.94535979716923",  // 農道菅生沼側
 		"35.981892481491194, 139.88945675246433",  // 目吹大橋野田側
