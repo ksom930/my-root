@@ -7,10 +7,17 @@
     <style>
         html, body { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
         #container { display: flex; flex-direction: column; height: 100%; }
-        #info-panel { padding: 10px; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 10; display: flex; justify-content: space-around; }
+        
+        /* ボタンと情報をまとめるパネル */
+        #top-panel { background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 10; padding: 10px; }
+        #switch-area { text-align: center; margin-bottom: 10px; }
+        .btn { padding: 6px 20px; font-size: 1rem; border: 1px solid #ccc; background: #f0f0f0; border-radius: 4px; cursor: pointer; }
+        .btn.active { background: #007bff; color: #fff; border-color: #007bff; font-weight: bold; }
+        
+        #info-panel { display: flex; justify-content: space-around; }
         .route-info { text-align: center; width: 45%; padding: 5px; border-radius: 5px; }
-        #routeA-info { border-left: 5px solid #0000FF; } /* ルートAは青 */
-        #routeB-info { border-left: 5px solid #FF0000; } /* ルートBは赤 */
+        #routeA-info { border-left: 5px solid #0000FF; }
+        #routeB-info { border-left: 5px solid #FF0000; }
         .time { font-size: 1.4rem; font-weight: bold; color: #333; }
         .distance { font-size: 0.9rem; color: #666; }
         #map { flex-grow: 1; height: 100%; }
@@ -19,86 +26,112 @@
 <body>
 
     <div id="container">
-        <!-- 所要時間を表示するパネル -->
-        <div id="info-panel">
-            <div id="routeA-info" class="route-info">
-                <div>ルートA (国道)</div>
-                <div id="timeA" class="time">計算中...</div>
-                <div id="distanceA" class="distance">- km</div>
+        <div id="top-panel">
+            <div id="switch-area">
+                <button id="btn-outbound" class="btn active" onclick="switchDirection('outbound')">行き（出勤）</button>
+                <button id="btn-inbound" class="btn" onclick="switchDirection('inbound')">帰り（退勤）</button>
             </div>
-            <div id="routeB-info" class="route-info">
-                <div>ルートB (バイパス)</div>
-                <div id="timeB" class="time">計算中...</div>
-                <div id="distanceB" class="distance">- km</div>
+            <div id="info-panel">
+                <div id="routeA-info" class="route-info">
+                    <div>ルートA (利根大橋)</div>
+                    <div id="timeA" class="time">計算中...</div>
+                    <div id="distanceA" class="distance">- km</div>
+                </div>
+                <div id="routeB-info" class="route-info">
+                    <div>ルートB (目吹橋)</div>
+                    <div id="timeB" class="time">計算中...</div>
+                    <div id="distanceB" class="distance">- km</div>
+                </div>
             </div>
         </div>
-        <!-- 地図を表示するエリア -->
         <div id="map"></div>
     </div>
 
     <script>
-        // 【設定】自宅、職場、それぞれの経由地の住所、または緯度経度を入力
+        // 【設定】住所、および「行き」「帰り」それぞれの経由地を設定
         const CONFIG = {
-            origin: "35.951436085177804, 139.99986558211424",      // 自宅（出発地）
-            destination: "35.94511123727137, 139.9216219134685",    // 職場（目的地）
-            waypointA: "35.90220767896441, 139.99870256819088",          // ルートAの経由地
-            waypointB: "35.9818521699697, 139.88946285973827"               // ルートBの経由地
+            home: "35.951436085177804, 139.99986558211424", 
+            office: "35.94511123727137, 139.9216219134685",
+            
+            // 行き（出勤）用の経由地
+            outboundWaypointA: "35.90220767896441, 139.99870256819088",
+            outboundWaypointB: "35.9818521699697, 139.88946285973827",
+            
+            // 帰り（退勤）用の経由地（行きと同じで問題なければ同じ住所でOK）
+            inboundWaypointA: "35.90220767896441, 139.99870256819088",
+            inboundWaypointB: "35.9818521699697, 139.88946285973827"
         };
 
+        let map, directionsService, directionsRendererA, directionsRendererB;
+        let currentDirection = 'outbound'; // 初期状態は「行き」
+
         function initMap() {
-            // 地図の初期化
-            const map = new google.maps.Map(document.getElementById('map'), {
+            map = new google.maps.Map(document.getElementById('map'), {
                 zoom: 12,
-                center: { lat: 35.6895, lng: 139.6917 }, // 初期位置（東京）
+                center: { lat: 35.6895, lng: 139.6917 },
                 mapTypeControl: false,
                 streetViewControl: false
             });
 
-	    // ★ここを追加：交通状況レイヤーを作成して地図に紐付ける
-    	    const trafficLayer = new google.maps.TrafficLayer();
-    	    trafficLayer.setMap(map);
+            // 渋滞レイヤーの表示
+            const trafficLayer = new google.maps.TrafficLayer();
+            trafficLayer.setMap(map);
 
-            const directionsService = new google.maps.DirectionsService();
+            directionsService = new google.maps.DirectionsService();
 
-            // ルートA（青）の設定と描画
-            const directionsRendererA = new google.maps.DirectionsRenderer({
+            directionsRendererA = new google.maps.DirectionsRenderer({
                 map: map,
-                polylineOptions: { strokeColor: '#0000FF', strokeOpacity: 0.4, strokeWeight: 6 },
-                suppressMarkers: false
+                polylineOptions: { strokeColor: '#0000FF', strokeOpacity: 0.5, strokeWeight: 6 }
             });
 
-            // ルートB（赤）の設定と描画
-            const directionsRendererB = new google.maps.DirectionsRenderer({
+            directionsRendererB = new google.maps.DirectionsRenderer({
                 map: map,
-                polylineOptions: { strokeColor: '#FF0000', strokeOpacity: 0.4, strokeWeight: 6 },
-                suppressMarkers: false
+                polylineOptions: { strokeColor: '#FF0000', strokeOpacity: 0.5, strokeWeight: 6 }
             });
 
-            // 経路の計算を実行
-            calculateRoute(directionsService, directionsRendererA, CONFIG.waypointA, 'timeA', 'distanceA');
-            calculateRoute(directionsService, directionsRendererB, CONFIG.waypointB, 'timeB', 'distanceB');
+            // 初回計算
+            updateRoutes();
         }
 
-        function calculateRoute(service, renderer, waypoint, timeId, distanceId) {
-            service.route({
-                origin: CONFIG.origin,
-                destination: CONFIG.destination,
-                waypoints: [{ location: waypoint, stopover: false }], // 立ち寄らずに通過する設定
+        // 行き・帰りのデータを切り替えて再計算する関数
+        function updateRoutes() {
+            let start, end, wpA, wpB;
+
+            if (currentDirection === 'outbound') {
+                start = CONFIG.home;
+                end = CONFIG.office;
+                wpA = CONFIG.outboundWaypointA;
+                wpB = CONFIG.outboundWaypointB;
+            } else {
+                start = CONFIG.office;
+                end = CONFIG.home;
+                wpA = CONFIG.inboundWaypointA;
+                wpB = CONFIG.inboundWaypointB;
+            }
+
+            document.getElementById('timeA').innerText = "計算中...";
+            document.getElementById('timeB').innerText = "計算中...";
+
+            calculateRoute(directionsRendererA, start, end, wpA, 'timeA', 'distanceA');
+            calculateRoute(directionsRendererB, start, end, wpB, 'timeB', 'distanceB');
+        }
+
+        function calculateRoute(renderer, start, end, waypoint, timeId, distanceId) {
+            directionsService.route({
+                origin: start,
+                destination: end,
+                waypoints: [{ location: waypoint, stopover: false }],
                 optimizeWaypoints: false,
                 travelMode: google.maps.TravelMode.DRIVING,
                 drivingOptions: {
-                    departureTime: new Date(), // 現在時刻の渋滞情報を考慮
+                    departureTime: new Date(),
                     trafficModel: 'bestguess'
                 }
             }, (result, status) => {
                 if (status === google.maps.DirectionsStatus.OK) {
                     renderer.setDirections(result);
-                    
-                    // 結果から所要時間と距離を抽出して画面に表示
                     const route = result.routes[0].legs[0];
-                    // drivingOptionsを設定している場合、duration_in_traffic（渋滞考慮の時間）が取得できます
                     const durationText = route.duration_in_traffic ? route.duration_in_traffic.text : route.duration.text;
-                    
                     document.getElementById(timeId).innerText = durationText;
                     document.getElementById(distanceId).innerText = route.distance.text;
                 } else {
@@ -106,8 +139,20 @@
                 }
             });
         }
+
+        // ボタンが押された時の処理
+        function switchDirection(direction) {
+            if (currentDirection === direction) return;
+            currentDirection = direction;
+
+            // ボタンの見た目を切り替え
+            document.getElementById('btn-outbound').classList.toggle('active', direction === 'outbound');
+            document.getElementById('btn-inbound').classList.toggle('active', direction === 'inbound');
+
+            // ルートを再計算
+            updateRoutes();
+        }
     </script>
-    <!-- 【重要】YOUR_API_KEY 部分を取得したAPIキーに書き換えます -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBsl6HVuu9oW2NMsMRpbmAytzOOhzQxkm0&callback=initMap" async defer></script>
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&callback=initMap" async defer></script>
 </body>
 </html>
