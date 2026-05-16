@@ -7,13 +7,10 @@
     <style>
         html, body { height: 100%; margin: 0; padding: 0; font-family: sans-serif; }
         #container { display: flex; flex-direction: column; height: 100%; }
-        
-        /* ボタンと情報をまとめるパネル */
         #top-panel { background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.3); z-index: 10; padding: 10px; }
         #switch-area { text-align: center; margin-bottom: 10px; }
         .btn { padding: 6px 20px; font-size: 1rem; border: 1px solid #ccc; background: #f0f0f0; border-radius: 4px; cursor: pointer; }
         .btn.active { background: #007bff; color: #fff; border-color: #007bff; font-weight: bold; }
-        
         #info-panel { display: flex; justify-content: space-around; }
         .route-info { text-align: center; width: 45%; padding: 5px; border-radius: 5px; }
         #routeA-info { border-left: 5px solid #0000FF; }
@@ -48,22 +45,50 @@
     </div>
 
     <script>
-        // 【設定】住所、および「行き」「帰り」それぞれの経由地を設定
+        // 【設定】経由地をそれぞれ最大3つまで登録できるようにしました。
+        // 使わない場所は ""（空欄）のままにしておけば、自動的に無視してルートを繋ぎます。
         const CONFIG = {
             home: "35.951436085177804, 139.99986558211424", 
             office: "35.94511123727137, 139.9216219134685",
             
-            // 行き（出勤）用の経由地
-            outboundWaypointA: "35.90220767896441, 139.99870256819088",
-            outboundWaypointB: "35.9818521699697, 139.88946285973827",
+            // ――― 行き（出勤）用の経由地 ―――
+            outboundWaypointsA: [
+                "35.90220767896441, 139.99870256819088",
+                "",  // 使わない場合は空欄にする
+                ""   // 使わない場合は空欄にする
+            ],
+            outboundWaypointsB: [
+                "35.9519255091217, 139.99964459594423",
+                "35.94850442086847, 139.98412664748838", 
+                "35.953975466590045, 139.97651495344445",
+		"35.96611971777015, 139.95815167742717",
+		"35.96530638906267, 139.94950633326238",
+		"35.9905975508094, 139.9235870090282",
+		"35.981892481491194, 139.88945675246433",
+		"",
+		"" 
+            ],
             
-            // 帰り（退勤）用の経由地（行きと同じで問題なければ同じ住所でOK）
-            inboundWaypointA: "35.90220767896441, 139.99870256819088",
-            inboundWaypointB: "35.9818521699697, 139.88946285973827"
+            // ――― 帰り（退勤）用の経由地 ―――
+            inboundWaypointsA: [
+                "35.90220767896441, 139.99870256819088",
+                "", 
+                "" 
+            ],
+            inboundWaypointsB: [
+                "35.9905975508094, 139.9235870090282",
+                "35.96530638906267, 139.94950633326238", 
+                "35.96662298038056, 139.96443185655102",
+                "35.953975466590045, 139.97651495344445",
+		"35.94850442086847, 139.98412664748838",
+		"",
+		"",
+		""
+            ]
         };
 
         let map, directionsService, directionsRendererA, directionsRendererB;
-        let currentDirection = 'outbound'; // 初期状態は「行き」
+        let currentDirection = 'outbound';
 
         function initMap() {
             map = new google.maps.Map(document.getElementById('map'), {
@@ -73,7 +98,6 @@
                 streetViewControl: false
             });
 
-            // 渋滞レイヤーの表示
             const trafficLayer = new google.maps.TrafficLayer();
             trafficLayer.setMap(map);
 
@@ -89,38 +113,47 @@
                 polylineOptions: { strokeColor: '#FF0000', strokeOpacity: 0.5, strokeWeight: 6 }
             });
 
-            // 初回計算
             updateRoutes();
         }
 
-        // 行き・帰りのデータを切り替えて再計算する関数
         function updateRoutes() {
-            let start, end, wpA, wpB;
+            let start, end, wpListA, wpListB;
 
             if (currentDirection === 'outbound') {
                 start = CONFIG.home;
                 end = CONFIG.office;
-                wpA = CONFIG.outboundWaypointA;
-                wpB = CONFIG.outboundWaypointB;
+                wpListA = CONFIG.outboundWaypointsA;
+                wpListB = CONFIG.outboundWaypointsB;
             } else {
                 start = CONFIG.office;
                 end = CONFIG.home;
-                wpA = CONFIG.inboundWaypointA;
-                wpB = CONFIG.inboundWaypointB;
+                wpListA = CONFIG.inboundWaypointsA;
+                wpListB = CONFIG.inboundWaypointsB;
             }
 
             document.getElementById('timeA').innerText = "計算中...";
             document.getElementById('timeB').innerText = "計算中...";
 
-            calculateRoute(directionsRendererA, start, end, wpA, 'timeA', 'distanceA');
-            calculateRoute(directionsRendererB, start, end, wpB, 'timeB', 'distanceB');
+            calculateRoute(directionsRendererA, start, end, wpListA, 'timeA', 'distanceA');
+            calculateRoute(directionsRendererB, start, end, wpListB, 'timeB', 'distanceB');
         }
 
-        function calculateRoute(renderer, start, end, waypoint, timeId, distanceId) {
+        function calculateRoute(renderer, start, end, waypointList, timeId, distanceId) {
+            // 空欄（""）を除外して、有効な経由地だけをまとめる
+            const validWaypoints = [];
+            for (let i = 0; i < waypointList.length; i++) {
+                if (waypointList[i] && waypointList[i].trim() !== "") {
+                    validWaypoints.push({
+                        location: waypointList[i],
+                        stopover: false // 立ち寄りではなく「通過」扱い
+                    });
+                }
+            }
+
             directionsService.route({
                 origin: start,
                 destination: end,
-                waypoints: [{ location: waypoint, stopover: false }],
+                waypoints: validWaypoints, // 有効な経由地だけを渡す
                 optimizeWaypoints: false,
                 travelMode: google.maps.TravelMode.DRIVING,
                 drivingOptions: {
@@ -140,16 +173,13 @@
             });
         }
 
-        // ボタンが押された時の処理
         function switchDirection(direction) {
             if (currentDirection === direction) return;
             currentDirection = direction;
 
-            // ボタンの見た目を切り替え
             document.getElementById('btn-outbound').classList.toggle('active', direction === 'outbound');
             document.getElementById('btn-inbound').classList.toggle('active', direction === 'inbound');
 
-            // ルートを再計算
             updateRoutes();
         }
     </script>
